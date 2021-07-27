@@ -1,0 +1,494 @@
+---
+title: "mofa_paad_11"
+author: "Christina Morgenstern"
+date: "7/06/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# MOFA of PDAC multi-omics dataset 
+
+Use all available data modalities at gene level without feature selection.
+
+```{r}
+# load libraries
+library(data.table)
+library(ggplot2)
+library(tidyverse)
+library(survival)
+library(survminer)
+library(Seurat)
+library(Signac)
+library(purrr)
+library(cowplot)
+library(MOFAdata)
+library(MOFA2)
+```
+
+```{r}
+# set options for diagrams
+options(ggrepel.max.overlaps = 20)
+```
+
+## Data imports
+
+### Import clincial metadata
+
+```{r}
+# clinical metadata
+clinical_metatdata <- read.csv("/Users/christina/01_Files/19_Master studies/02_Course work/13_Capstone/data/data/csv_files/clinical_metadata.csv")
+head(clinical_metatdata)
+```
+Prepare clinical metadata
+
+```{r}
+#transpose data frame (samples rows and features columns)
+metadata <- setNames(data.frame(t(clinical_metatdata[,-1])), clinical_metatdata[,1])
+metadata <- rownames_to_column(metadata, var = "sample")
+
+# convert non-numeric columns to numeric
+metadata[, c(2, 8, 14, 15, 16)] <- sapply(metadata[, c(2, 8, 14, 15, 16)], as.numeric)
+head(metadata)
+```
+
+
+### Import "omics" data matrices
+
+The omics data matrices were retrieved from LinkedOmics (http://linkedomics.org/data_download/TCGA-PAAD/). Initial exploration and conversion to .csv files was done in Python. 
+
+#### Mutation data
+
+The mutation data matrix contains binary values for the presence (1) or absence (0) of a gene-specific mutation.
+
+```{r}
+# mutation data 
+mutation <- read_csv("/Users/christina/01_Files/19_Master studies/02_Course work/13_Capstone/data/data/csv_files/mutation_gene.csv")
+head(mutation)
+```
+
+
+```{r}
+# transpose data frame (samples rows and features columns)
+mutation_df <- melt(data = mutation, id.vars = "attrib_name", variable.name = "sample", value.name = "value")
+mutation_df <- mutation_df %>%
+  mutate(view = "mutation")
+mutation_df <- rename(mutation_df, feature = attrib_name)
+mutation_df <- relocate(mutation_df, feature, .after = sample)
+head(mutation_df)
+```
+
+#### RNA sequencing data (transcriptomic data)
+
+```{r}
+# RNA sequencing data
+rna <- read_csv("/Users/christina/01_Files/19_Master studies/02_Course work/13_Capstone/data/data/csv_files/rna.csv")
+head(rna)
+```
+
+
+
+```{r}
+# prepare data frame
+rna_df <- melt(data = rna, id.vars = "attrib_name", variable.name = "sample", value.name = "value")
+rna_df <- rna_df %>%
+  mutate(view = "mRNA")
+rna_df <- rename(rna_df, feature = attrib_name)
+rna_df <- relocate(rna_df, feature, .after = sample)
+head(rna_df)
+```
+
+#### Preprocessing of methylation data
+
+```{r}
+# methylation data
+methyl <- read_csv('/Users/christina/01_Files/19_Master studies/02_Course work/13_Capstone/data/data/csv_files/methyl_gene.csv')
+head(methyl)
+```
+
+
+
+```{r}
+methyl_df <- melt(data = methyl, id.vars = "attrib_name", variable.name = "sample", value.name = "value")
+methyl_df <- methyl_df %>%
+  mutate(view = "methylation")
+methyl_df <- rename(methyl_df, feature = attrib_name)
+methyl_df <- relocate(methyl_df, feature, .after = sample)
+head(methyl_df)
+```
+
+#### Preprocessing of somatic copy number variation data
+
+```{r}
+# SCNV data
+scnv <- read_csv("/Users/christina/01_Files/19_Master studies/02_Course work/13_Capstone/data/data/csv_files/scnv_gene.csv")
+head(scnv)
+```
+
+
+
+```{r}
+scnv_df <- melt(data = scnv, id.vars = "attrib_name", variable.name = "sample", value.name = "value")
+scnv_df <- scnv_df %>%
+  mutate(view = "SCNV")
+scnv_df <- rename(scnv_df, feature = attrib_name)
+scnv_df <- relocate(scnv_df, feature, .after = sample)
+head(scnv_df)
+```
+
+#### microRNA data
+
+```{r}
+# microRNA data
+mirna <- read_csv("/Users/christina/01_Files/19_Master studies/02_Course work/13_Capstone/data/data/csv_files/mirna.csv")
+head(mirna)
+```
+
+
+
+```{r}
+mirna_df <- melt(data = mirna, id.vars = "attrib_name", variable.name = "sample", value.name = "value")
+mirna_df <- mirna_df %>%
+  mutate(view = "microRNA")
+mirna_df <- rename(mirna_df, feature = attrib_name)
+mirna_df <- relocate(mirna_df, feature, .after = sample)
+head(mirna_df)
+
+```
+
+#### Protein data
+
+```{r}
+# protein data
+rppa <- read_csv("/Users/christina/01_Files/19_Master studies/02_Course work/13_Capstone/data/data/csv_files/rppa_gene.csv")
+head(rppa)
+```
+
+```{r}
+rppa_df <- melt(data = rppa, id.vars = "attrib_name", variable.name = "sample", value.name = "value")
+rppa_df <- rppa_df %>%
+  mutate(view = "protein")
+rppa_df <- rename(rppa_df, feature = attrib_name)
+rppa_df <- relocate(rppa_df, feature, .after = sample)
+head(rppa_df)
+```
+
+## Create MOFA object 
+
+```{r}
+# create MOFA without methylation data.
+PAAD_data <- rbind(rna_df, mutation_df, scnv_df, methyl_df, mirna_df, rppa_df)
+head(PAAD_data)
+```
+```{r}
+dim(PAAD_data)
+```
+
+
+```{r}
+mofa_object <- create_mofa(PAAD_data)
+```
+
+```{r}
+mofa_object
+```
+
+```{r}
+plot_data_overview(mofa_object)
+```
+
+Data Options
+```{r}
+data_opts <- get_default_data_options(mofa_object)
+data_opts
+```
+
+Model options
+```{r}
+model_opts <- get_default_model_options(mofa_object)
+model_opts
+```
+
+```{r}
+# change model options for mutation likelihood to Bernoulli
+model_opts$likelihoods["mutation"] <- "bernoulli"
+
+# change number of factors
+#model_opts$num_factors <- 10
+model_opts
+```
+
+
+
+Training options
+```{r}
+train_opts <- get_default_training_options(mofa_object)
+train_opts
+```
+
+```{r}
+# modify train options 
+train_opts$convergence_mode <- "slow"
+train_opts$seed <- 42
+train_opts
+```
+
+Prepare MOFA model
+```{r}
+mofa_object <- prepare_mofa(mofa_object, 
+                            data_options = data_opts,
+                            model_options = model_opts,
+                            training_options = train_opts
+                            )
+```
+
+
+```{r}
+mofa_object <- run_mofa(mofa_object, outfile="/Users/christina/01_Files/19_Master studies/02_Course work/13_Capstone/data/data/models_final/MOFA_PAAD_11.hdf5")
+```
+
+```{r}
+saveRDS(mofa_object,"MOFA_PAAD_11.rds")
+```
+
+
+```{r}
+slotNames(mofa_object)
+```
+
+```{r}
+names(mofa_object@data)
+```
+
+```{r}
+names(mofa_object@expectations)
+```
+
+
+```{r}
+# Dimensionality of the factor matrix
+dim(mofa_object@expectations$Z$single_group)
+```
+
+
+```{r}
+# add metadata to mofa_object
+samples_metadata(mofa_object) <- metadata
+```
+
+
+###Variance decomposition
+
+```{r}
+# Total variance explained per view and group
+head(get_variance_explained(mofa_object)$r2_total[[1]])
+```
+
+
+```{r}
+# Variance explained for every factor in per view and group
+head(get_variance_explained(mofa_object)$r2_per_factor[[1]])
+```
+```{r}
+# factor correlation plot
+plot_factor_cor(mofa_object)
+```
+
+Variance decomposition by Factor 
+
+```{r}
+plot_variance_explained(mofa_object, x="view", y="factor")
+```
+
+Total variance explained per view
+```{r}
+plot_variance_explained(mofa_object, plot_total = T) [[2]]
+```
+
+#### Association analysis
+
+```{r}
+correlate_factors_with_covariates(mofa_object, covariates = c("pathologic_stage", "pathology_T_stage", "pathology_N_stage", "pathology_M_stage", "gender", "radiation_therapy", "residual_tumor", "race", "ethnicity", "overall_survival"),
+                                  plot = "log_pval")
+```
+
+
+#### Characteriastion of factors
+
+Plot feature weights
+
+```{r}
+plot_top_weights(mofa_object,
+                  view = "mRNA",
+                  factor = 1,
+                  nfeatures = 10,
+                  scale = T
+                  )
+```
+
+```{r}
+plot_top_weights(mofa_object,
+                  view = "mutation",
+                  factor = 1,
+                  nfeatures = 10,
+                  scale = T
+                  )
+```
+
+
+
+```{r}
+plot_top_weights(mofa_object,
+                  view = "methylation",
+                  factor = 1,
+                  nfeatures = 10,
+                  scale = T
+                  )
+```
+
+```{r}
+plot_top_weights(mofa_object,
+                  view = "SCNV",
+                  factor = 1,
+                  nfeatures = 10,
+                  scale = T
+                  )
+```
+```{r}
+plot_top_weights(mofa_object,
+                  view = "microRNA",
+                  factor = 1,
+                  nfeatures = 10,
+                  scale = T
+                  )
+```
+
+```{r}
+plot_top_weights(mofa_object,
+                  view = "protein",
+                  factor = 1,
+                  nfeatures = 10,
+                  scale = T
+                  )
+```
+
+
+Characterisation of Factor 2
+
+
+```{r}
+plot_top_weights(mofa_object,
+                  view = "mRNA",
+                  factor = 2,
+                  nfeatures = 10,
+                  scale = T
+)
+```
+
+
+```{r}
+plot_top_weights(mofa_object,
+                 view = "mutation",
+                 factors = 2,
+                 nfeatures = 10)
+```
+
+
+```{r}
+plot_top_weights(mofa_object,
+                  view = "methylation",
+                  factor = 2,
+                  nfeatures = 10,
+                  scale = T
+                  )
+```
+
+```{r}
+plot_top_weights(mofa_object,
+                  view = "SCNV",
+                  factor = 2,
+                  nfeatures = 10,
+                  scale = T
+                  )
+```
+
+```{r}
+plot_top_weights(mofa_object,
+                  view = "microRNA",
+                  factor = 2,
+                  nfeatures = 10,
+                  scale = T
+                  )
+```
+```{r}
+plot_top_weights(mofa_object,
+                  view = "protein",
+                  factor = 2,
+                  nfeatures = 10,
+                  scale = T
+                  )
+```
+
+
+Factor 3
+
+```{r}
+plot_top_weights(mofa_object,
+                  view = "mRNA",
+                  factor = 3,
+                  nfeatures = 10,
+                  scale = T
+)
+```
+
+```{r}
+plot_top_weights(mofa_object,
+                  view = "mutation",
+                  factor = 3,
+                  nfeatures = 10,
+                  scale = T
+)
+```
+
+
+```{r}
+plot_top_weights(mofa_object,
+                  view = "methylation",
+                  factor = 3,
+                  nfeatures = 10,
+                  scale = T
+                  )
+```
+```{r}
+plot_top_weights(mofa_object,
+                  view = "microRNA",
+                  factor = 3,
+                  nfeatures = 10,
+                  scale = T
+                  )
+```
+
+```{r}
+plot_top_weights(mofa_object,
+                  view = "SCNV",
+                  factor = 3,
+                  nfeatures = 10,
+                  scale = T
+                  )
+```
+
+
+```{r}
+plot_top_weights(mofa_object,
+                  view = "protein",
+                  factor = 3,
+                  nfeatures = 10,
+                  scale = T
+                  )
+```
+
+
+
+

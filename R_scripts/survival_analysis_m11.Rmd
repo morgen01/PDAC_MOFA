@@ -1,0 +1,258 @@
+---
+title: "cox_model"
+author: "Christina Morgenstern"
+date: "6/18/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(ggplot2)
+library(cowplot)
+
+# for survival analysis
+library(survival)
+library(survminer)
+
+# MOFA
+library(MOFAdata)
+library(MOFAdata)
+```
+
+```{r}
+model <- load_model('/Users/christina/01_Files/19_Master studies/02_Course work/13_Capstone/data/data/models_final/MOFA_PAAD_11.hdf5')
+```
+
+```{r}
+# impute model
+model <- impute(model)
+```
+
+
+## Add metadata to the model
+
+### Import clincial metadata
+
+```{r}
+# clinical metadata
+clinical_metatdata <- read.csv("/Users/christina/01_Files/19_Master studies/02_Course work/13_Capstone/data/data/csv_files/clinical_metadata.csv")
+head(clinical_metatdata)
+```
+
+Prepare clinical metadata
+```{r}
+#transpose data frame (samples rows and features columns)
+metadata <- setNames(data.frame(t(clinical_metatdata[,-1])), clinical_metatdata[,1])
+metadata <- rownames_to_column(metadata, var = "sample")
+
+# convert non-numeric columns to numeric
+metadata[, c(2, 8, 14, 15, 16)] <- sapply(metadata[, c(2, 8, 14, 15, 16)], as.numeric)
+head(metadata)
+```
+
+
+```{r}
+samples_metadata(model) <- metadata 
+```
+
+### Imputation of missing values
+
+```{r}
+#model <- impute(model)
+```
+
+```{r}
+#model@imputed_data
+```
+
+
+### Survival analysis
+
+```{r}
+help(Surv)
+```
+
+```{r}
+help(coxph)
+```
+
+
+```{r}
+SurvObject <- Surv(model@samples_metadata$overall_survival, model@samples_metadata$status)
+```
+Factor 1 has a negative coefficient. Samples with low factor values have an increased hazard compared to samples with a large factor values.
+```{r}
+Z <- get_factors(model)[[1]]
+```
+
+```{r}
+fit <- coxph(SurvObject ~ Z) 
+fit
+```
+
+
+```{r}
+s <- summary(fit)
+coef <- s[["coefficients"]]
+
+df <- data.frame(
+  factor = factor(rownames(coef), levels = rev(rownames(coef))),
+  p      = coef[,"Pr(>|z|)"], 
+  coef   = coef[,"exp(coef)"], 
+  lower  = s[["conf.int"]][,"lower .95"], 
+  higher = s[["conf.int"]][,"upper .95"]
+)
+
+ggplot(df, aes(x=factor, y=coef, ymin=lower, ymax=higher)) +
+  geom_pointrange( col='#619CFF') + 
+  coord_flip() +
+  scale_x_discrete() + 
+  labs(y="Hazard Ratio", x="") + 
+  geom_hline(aes(yintercept=1), linetype="dotted") +
+  theme_bw()
+```
+
+Kaplan-Meier plots
+
+```{r}
+df <- data.frame(
+  time = SurvObject[,1], 
+  event = SurvObject[,2], Z1 = Z[,1]
+)
+cut <- surv_cutpoint(df, variables='Z1')
+df$FactorCluster <- df$Z1 > cut$cutpoint$cutpoint
+fit <- survfit(Surv(time, event) ~ FactorCluster, df)
+
+ggsurvplot(fit, data = df,
+  conf.int = TRUE, pval = TRUE,
+  fun = function(y) y * 100,
+  legend = "top", legend.labs = c(paste("low LF 1"), paste("high LF 1")),
+  xlab = "Overall survival time (days)", ylab="Survival probability (%)", title= "Factor 1"
+)$plot
+```
+
+```{r}
+df <- data.frame(
+  time = SurvObject[,1], 
+  event = SurvObject[,2], Z1 = Z[,2]
+)
+cut <- surv_cutpoint(df, variables='Z1')
+df$FactorCluster <- df$Z1 > cut$cutpoint$cutpoint
+fit <- survfit(Surv(time, event) ~ FactorCluster, df)
+
+ggsurvplot(fit, data = df,
+  conf.int = TRUE, pval = TRUE,
+  fun = function(y) y * 100,
+  legend = "top", legend.labs = c(paste("low LF 2"), paste("high LF 2")),
+  xlab = "Overall survival time (days)", ylab="Survival probability (%)", title= "Factor 2"
+)$plot
+```
+
+
+```{r}
+df <- data.frame(
+  time = SurvObject[,1], 
+  event = SurvObject[,2], Z1 = Z[,3]
+)
+cut <- surv_cutpoint(df, variables='Z1')
+df$FactorCluster <- df$Z1 > cut$cutpoint$cutpoint
+fit <- survfit(Surv(time, event) ~ FactorCluster, df)
+
+ggsurvplot(fit, data = df,
+  conf.int = TRUE, pval = TRUE,
+  fun = function(y) y * 100,
+  legend = "top", legend.labs = c(paste("low LF 3"), paste("high LF 3")),
+  xlab = "Overall survival time (days)", ylab="Survival probability (%)", title= "Factor 3"
+)$plot
+```
+
+
+```{r}
+df <- data.frame(
+  time = SurvObject[,1], 
+  event = SurvObject[,2], Z1 = Z[,5]
+)
+cut <- surv_cutpoint(df, variables='Z1')
+df$FactorCluster <- df$Z1 > cut$cutpoint$cutpoint
+fit <- survfit(Surv(time, event) ~ FactorCluster, df)
+
+ggsurvplot(fit, data = df,
+  conf.int = TRUE, pval = TRUE,
+  fun = function(y) y * 100,
+  legend = "top", legend.labs = c(paste("low LF 5"), paste("high LF 5")),
+  xlab = "Overall survival time (days)", ylab="Survival probability (%)", title= "Factor 5"
+)$plot
+```
+
+```{r}
+df <- data.frame(
+  time = SurvObject[,1], 
+  event = SurvObject[,2], Z1 = Z[,6]
+)
+cut <- surv_cutpoint(df, variables='Z1')
+df$FactorCluster <- df$Z1 > cut$cutpoint$cutpoint
+fit <- survfit(Surv(time, event) ~ FactorCluster, df)
+
+ggsurvplot(fit, data = df,
+  conf.int = TRUE, pval = TRUE,
+  fun = function(y) y * 100,
+  legend = "top", legend.labs = c(paste("low LF 6"), paste("high LF 6")),
+  xlab = "Overall survival time (days)", ylab="Survival probability (%)", title= "Factor 6"
+)$plot
+```
+
+```{r}
+df <- data.frame(
+  time = SurvObject[,1], 
+  event = SurvObject[,2], Z1 = Z[,7]
+)
+cut <- surv_cutpoint(df, variables='Z1')
+df$FactorCluster <- df$Z1 > cut$cutpoint$cutpoint
+fit <- survfit(Surv(time, event) ~ FactorCluster, df)
+
+ggsurvplot(fit, data = df,
+  conf.int = TRUE, pval = TRUE,
+  fun = function(y) y * 100,
+  legend = "top", legend.labs = c(paste("low LF 7"), paste("high LF 7")),
+  xlab = "Overall survival time (days)", ylab="Survival probability (%)", title= "Factor 7"
+)$plot
+```
+
+
+
+```{r}
+df <- data.frame(
+  time = SurvObject[,1], 
+  event = SurvObject[,2], Z1 = Z[,4]
+)
+cut <- surv_cutpoint(df, variables='Z1')
+df$FactorCluster <- df$Z1 > cut$cutpoint$cutpoint
+fit <- survfit(Surv(time, event) ~ FactorCluster, df)
+
+ggsurvplot(fit, data = df,
+  conf.int = TRUE, pval = TRUE,
+  fun = function(y) y * 100,
+  legend = "top", legend.labs = c(paste("low LF 4"), paste("high LF 4")),
+  xlab = "Overall survival time (days)", ylab="Survival probability (%)", title= "Factor 4"
+)$plot
+```
+
+```{r}
+df <- data.frame(
+  time = SurvObject[,1], 
+  event = SurvObject[,2], Z1 = Z[,11]
+)
+cut <- surv_cutpoint(df, variables='Z1')
+df$FactorCluster <- df$Z1 > cut$cutpoint$cutpoint
+fit <- survfit(Surv(time, event) ~ FactorCluster, df)
+
+ggsurvplot(fit, data = df,
+  conf.int = TRUE, pval = TRUE,
+  fun = function(y) y * 100,
+  legend = "top", legend.labs = c(paste("low LF 11"), paste("high LF 11")),
+  xlab = "Overall survival time (days)", ylab="Survival probability (%)", title= "Factor 11"
+)$plot
+```

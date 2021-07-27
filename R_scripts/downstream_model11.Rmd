@@ -1,0 +1,885 @@
+---
+title: "downstream_model11"
+author: "Christina Morgenstern"
+date: "6/7/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# Downstream analysis of MOFA-PDAC model 11
+
+```{r}
+library(ggplot2)
+library(cowplot)
+# for GSEA analysis
+library(msigdbr)
+
+# MOFA
+library(MOFAdata)
+library(MOFAdata)
+```
+
+```{r}
+model <- load_model('/Users/christina/01_Files/19_Master studies/02_Course work/13_Capstone/data/data/models_final/MOFA_PAAD_11.hdf5')
+```
+
+```{r}
+plot_data_overview(model)
+```
+
+## Add metadata to the model
+
+### Import clincial metadata
+
+```{r}
+# clinical metadata
+clinical_metatdata <- read.csv("/Users/christina/01_Files/19_Master studies/02_Course work/13_Capstone/data/data/csv_files/clinical_metadata.csv")
+head(clinical_metatdata)
+```
+
+Prepare clinical metadata
+```{r}
+#transpose data frame (samples rows and features columns)
+metadata <- setNames(data.frame(t(clinical_metatdata[,-1])), clinical_metatdata[,1])
+metadata <- rownames_to_column(metadata, var = "sample")
+
+# convert non-numeric columns to numeric
+metadata[, c(2, 8, 14, 15, 16)] <- sapply(metadata[, c(2, 8, 14, 15, 16)], as.numeric)
+head(metadata)
+```
+
+
+```{r}
+samples_metadata(model) <- metadata 
+```
+
+## Variance decomposition
+
+Quantify the amount of variance explained (R2) by each factor in each data modality.
+
+```{r}
+head(model@cache$variance_explained$r2_total)
+```
+
+```{r}
+head(model@cache$variance_explained$r2_per_factor)
+```
+```{r}
+plot_variance_explained(model, max_r2=20)
+```
+```{r}
+plot_variance_explained(model, plot_total = T)
+```
+
+A good sanity check is to verify that the Factors are largely uncorrelated. In MOFA there are no orthogonality constraints such as in Principal Component Analysis, but if there is a lot of correlation between Factors this suggests a poor model fit
+```{r}
+plot_factor_cor(model)
+```
+
+```{r}
+r2 <- model@cache$variance_explained$r2_per_factor[[1]]
+
+r2.dt <- r2 %>%
+  as.data.table %>% .[,factor:=as.factor(1:model@dimensions$K)] %>%
+  melt(id.vars=c("factor"), variable.name="view", value.name = "r2") %>%
+  .[,cum_r2:=cumsum(r2), by="view"]
+
+ggline(r2.dt, x="factor", y="cum_r2", color="view") +
+  labs(x="Factor number", y="Cumulative variance explained (%)") +
+  theme(
+    legend.title = element_blank(), 
+    legend.position = "top",
+    axis.text = element_text(size=rel(0.8))
+  )
+```
+
+```{r}
+pathologic_stage.colors <- c(
+  "nan" = "grey",
+  "stagei" = "#66C2A5", 
+  "stageii" = "#8DA0CB",
+  "stageiii" = "#E78AC3",
+  "stageiv" = "#FC8D62"
+)
+```
+
+
+```{r}
+plot_factor(model, 
+  factor = 1, 
+  color_by = "pathologic_stage", 
+  dot_size = 4,
+  dodge = TRUE,
+  stroke = 0.4,
+  add_violin = T,
+  add_boxplot = T
+) +
+  scale_fill_manual(values=pathologic_stage.colors) +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
+```
+
+```{r}
+plot_factor(model, 
+  factor = 2, 
+  color_by = "pathologic_stage", 
+  dot_size = 4,
+  dodge = TRUE,
+  stroke = 0.4,
+  add_violin = T,
+  add_boxplot = T
+) +
+  scale_fill_manual(values=pathologic_stage.colors) +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
+```
+
+```{r}
+plot_factor(model, 
+  factor = 3, 
+  color_by = "pathologic_stage", 
+  dot_size = 4,
+  dodge = TRUE,
+  stroke = 0.4,
+  add_violin = T,
+  add_boxplot = T
+) +
+  scale_fill_manual(values=pathologic_stage.colors) +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
+```
+
+```{r}
+status.colors <- c(
+  "nan" = "grey",
+  "0" = "#66C2A5", 
+  "1" = "#8DA0CB"
+)
+```
+
+
+```{r}
+plot_factor(model, 
+  factor = 1, 
+  color_by = "status", 
+  dot_size = 4,
+  dodge = TRUE,
+  stroke = 0.4,
+  add_violin = T,
+  add_boxplot = T
+) +
+  scale_fill_manual(values=status.colors) +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
+```
+
+```{r}
+plot_factor(model, 
+  factor = 2, 
+  color_by = "status", 
+  dot_size = 4,
+  dodge = TRUE,
+  stroke = 0.4,
+  add_violin = T,
+  add_boxplot = T
+) +
+  scale_fill_manual(values=status.colors) +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
+```
+
+```{r}
+plot_factor(model, 
+  factor = 3, 
+  color_by = "status", 
+  dot_size = 4,
+  dodge = TRUE,
+  stroke = 0.4,
+  add_violin = T,
+  add_boxplot = T
+) +
+  scale_fill_manual(values=status.colors) +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
+```
+
+
+```{r}
+correlate_factors_with_covariates(model, 
+  covariates = c("pathologic_stage", "pathology_T_stage", "pathology_N_stage", "pathology_M_stage", "gender", "radiation_therapy", "residual_tumor", "race", "ethnicity", "overall_survival", "status", "histological_type", "residual_tumor", "radiation_therapy"),
+  plot = "r",  # use "log_pval" to plot log p-values 
+)
+```
+
+
+
+```{r}
+plot_factor(model, 
+            factor = 1:3,
+            color_by = "overall_survival",
+            group_by = "gender",
+            add_violin = TRUE
+            )
+```
+```{r}
+plot_factors(model, 
+  factors = 1:3,
+  color_by = "overall_survival",
+  shape_by = "gender"
+)
+```
+
+### Association analysis
+
+```{r}
+correlate_factors_with_covariates(model, covariates = c("pathologic_stage", "pathology_T_stage", "pathology_N_stage", "pathology_M_stage", "gender", "radiation_therapy", "residual_tumor", "race", "ethnicity", "overall_survival"),
+                                  plot = "log_pval")
+```
+
+### Characterisation of factors
+
+Plot feature weights
+
+```{r}
+plot_top_weights(model,
+                  view = "mRNA",
+                  factor = 1,
+                  nfeatures = 10,
+                  scale = T
+                  )
+```
+
+```{r}
+plot_top_weights(model,
+                  view = "mutation",
+                  factor = 1,
+                  nfeatures = 10,
+                  scale = T
+                  )
+```
+
+```{r}
+plot_factor(mofa_object, 
+  factors = 1, 
+  color_by = "KRAS_mutation",
+  add_violin = TRUE,
+  dodge = TRUE
+)
+
+```
+
+
+```{r}
+plot_top_weights(model,
+                  view = "methylation",
+                  factor = 1,
+                  nfeatures = 10,
+                  scale = T
+                  )
+```
+
+```{r}
+plot_top_weights(model,
+                  view = "SCNV",
+                  factor = 1,
+                  nfeatures = 10,
+                  scale = T
+                  )
+```
+
+```{r}
+plot_top_weights(model,
+                  view = "microRNA",
+                  factor = 1,
+                  nfeatures = 10,
+                  scale = T
+                  )
+```
+
+```{r}
+plot_top_weights(model,
+                  view = "protein",
+                  factor = 1,
+                  nfeatures = 10,
+                  scale = T
+                  )
+```
+
+```{r}
+plot_factor(model, 
+  factors = 1, 
+  color_by = "KRAS_mutation",
+  dodge = TRUE,
+  add_violin = TRUE
+)
+```
+
+```{r}
+p <- plot_factors(model, 
+  factors = c(1,3), 
+  color_by = "KRAS_mutation",
+  shape_by = "TP53_mutation",
+  dot_size = 2.5,
+  show_missing = T
+)
+
+p <- p + 
+  geom_hline(yintercept=-1, linetype="dashed") +
+  geom_vline(xintercept=(-0.5), linetype="dashed")
+
+print(p)
+```
+
+
+Characterization of Factor 2
+
+```{r}
+plot_top_weights(model,
+                  view = "mRNA",
+                  factor = 2,
+                  nfeatures = 10,
+                  scale = T
+)
+```
+
+
+```{r}
+plot_top_weights(model,
+                 view = "mutation",
+                 factors = 2,
+                 nfeatures = 10)
+```
+
+
+```{r}
+plot_top_weights(model,
+                  view = "methylation",
+                  factor = 2,
+                  nfeatures = 10,
+                  scale = T
+                  )
+```
+
+```{r}
+plot_top_weights(model,
+                  view = "SCNV",
+                  factor = 2,
+                  nfeatures = 10,
+                  scale = T
+                  )
+```
+
+```{r}
+plot_top_weights(model,
+                  view = "microRNA",
+                  factor = 2,
+                  nfeatures = 10,
+                  scale = T
+                  )
+```
+
+```{r}
+plot_top_weights(model,
+                  view = "protein",
+                  factor = 2,
+                  nfeatures = 10,
+                  scale = T
+                  )
+```
+
+
+Factor 3
+
+```{r}
+plot_top_weights(model,
+                  view = "mRNA",
+                  factor = 3,
+                  nfeatures = 10,
+                  scale = T
+)
+```
+
+```{r}
+plot_top_weights(model,
+                  view = "mutation",
+                  factor = 3,
+                  nfeatures = 10,
+                  scale = T
+)
+```
+
+
+```{r}
+plot_top_weights(model,
+                  view = "methylation",
+                  factor = 3,
+                  nfeatures = 10,
+                  scale = T
+                  )
+```
+```{r}
+plot_top_weights(model,
+                  view = "microRNA",
+                  factor = 3,
+                  nfeatures = 10,
+                  scale = T
+                  )
+```
+
+```{r}
+plot_top_weights(model,
+                  view = "SCNV",
+                  factor = 3,
+                  nfeatures = 10,
+                  scale = T
+                  )
+```
+
+
+```{r}
+plot_top_weights(model,
+                  view = "protein",
+                  factor = 3,
+                  nfeatures = 10,
+                  scale = T
+                  )
+```
+
+```{r}
+plot_data_scatter(model, 
+  view = "mRNA",
+  factor = 1,  
+  features = 4,
+  sign = "negative",
+  color_by = "CDKN2A_SCNV"
+) + labs(y="RNA expression")
+```
+
+```{r}
+plot_data_scatter(model, 
+  view = "mRNA",
+  factor = 1,  
+  features = 4,
+  sign = "negative",
+  color_by = "C9orf53_SCNV"
+) + labs(y="RNA expression")
+```
+```{r}
+plot_data_scatter(model, 
+  view = "methylation",
+  factor = 2,  
+  features = 4,
+  sign = "negative",
+  color_by = "KRAS_mutation"
+) + labs(y="RNA expression")
+```
+
+
+```{r}
+plot_data_scatter(model, 
+  view = "mRNA",
+  factor = 1,  
+  features = 4,
+  sign = "negtive",
+  color_by = "CELSR1_methylation"
+) + labs(y="RNA expression")
+```
+```{r}
+plot_data_scatter(model, 
+  view = "methylation",
+  factor = 1,  
+  features = 4,
+  sign = "positive",
+  color_by = "CEACAM5_mRNA"
+) + labs(y="RNA expression")
+```
+
+```{r}
+plot_data_scatter(model, 
+  view = "methylation",
+  factor = 1,  
+  features = 4,
+  sign = "positive",
+  color_by = "hsa-mir-199a-2"
+) + labs(y="RNA expression")
+```
+
+
+### Visualization of patterns in input data
+
+```{r}
+plot_data_heatmap(model,
+  view = "mRNA",         # view of interest
+  factor = 1,             # factor of interest
+  features = 10,          # number of features to plot (they are selected by weight)
+  
+  # extra arguments that are passed to the `pheatmap` function
+  cluster_rows = TRUE, cluster_cols = FALSE,
+  show_rownames = TRUE, show_colnames = FALSE,
+  annotation_samples =  c("pathologic_stage", "status", "overall_survival"),
+  denoise = TRUE
+)
+```
+
+```{r}
+plot_data_heatmap(model,
+  view = "mRNA",         # view of interest
+  factor = 1,             # factor of interest
+  features = 10,          # number of features to plot (they are selected by weight)
+  
+  # extra arguments that are passed to the `pheatmap` function
+  cluster_rows = TRUE, cluster_cols = FALSE,
+  show_rownames = TRUE, show_colnames = FALSE,
+  annotation_samples = "pathology_T_stage",
+  denoise = TRUE
+)
+```
+
+
+```{r}
+plot_data_heatmap(model,
+  view = "mRNA",         # view of interest
+  factor = 2,             # factor of interest
+  features = 10,          # number of features to plot (they are selected by weight)
+  
+  # extra arguments that are passed to the `pheatmap` function
+  cluster_rows = TRUE, cluster_cols = FALSE,
+  show_rownames = TRUE, show_colnames = FALSE,
+  annotation_samples = "pathologic_stage",
+  denoise = TRUE
+)
+```
+```{r}
+plot_data_heatmap(model,
+  view = "mRNA",         # view of interest
+  factor = 3,             # factor of interest
+  features = 10,          # number of features to plot (they are selected by weight)
+  
+  # extra arguments that are passed to the `pheatmap` function
+  cluster_rows = TRUE, cluster_cols = FALSE,
+  show_rownames = TRUE, show_colnames = FALSE,
+  annotation_samples = c("pathologic_stage", "status", "overall_survival"),
+  denoise = TRUE
+)
+```
+
+
+```{r}
+plot_data_heatmap(model,
+  view = "microRNA",         # view of interest
+  factor = 1,             # factor of interest
+  features = 10,          # number of features to plot (they are selected by weight)
+  
+  # extra arguments that are passed to the `pheatmap` function
+  cluster_rows = TRUE, cluster_cols = FALSE,
+  show_rownames = TRUE, show_colnames = FALSE,
+  annotation_samples = c("pathologic_stage", "status", "overall_survival"),
+  denoise = TRUE
+)
+```
+
+```{r}
+plot_data_heatmap(model,
+  view = "microRNA",         # view of interest
+  factor = 3,             # factor of interest
+  features = 10,          # number of features to plot (they are selected by weight)
+  
+  # extra arguments that are passed to the `pheatmap` function
+  cluster_rows = TRUE, cluster_cols = FALSE,
+  show_rownames = TRUE, show_colnames = FALSE,
+  annotation_samples = c("pathologic_stage", "status", "overall_survival"),
+  denoise = TRUE
+)
+```
+
+```{r}
+plot_data_heatmap(model,
+  view = "mutation",         # view of interest
+  factor = 1,             # factor of interest
+  features = 10,          # number of features to plot (they are selected by weight)
+  
+  # extra arguments that are passed to the `pheatmap` function
+  cluster_rows = TRUE, cluster_cols = FALSE,
+  show_rownames = TRUE, show_colnames = FALSE,
+  annotation_samples = c("pathology_T_stage","overall_survival", "pathologic_stage")
+)
+```
+
+```{r}
+plot_data_heatmap(model,
+  view = "mutation",         # view of interest
+  factor = 2,             # factor of interest
+  features = 10,          # number of features to plot (they are selected by weight)
+  
+  # extra arguments that are passed to the `pheatmap` function
+  cluster_rows = TRUE, cluster_cols = FALSE,
+  show_rownames = TRUE, show_colnames = FALSE,
+  annotation_samples = c("pathology_T_stage","overall_survival", "pathologic_stage")
+)
+```
+
+```{r}
+plot_data_heatmap(model,
+  view = "mutation",         # view of interest
+  factor = 3,             # factor of interest
+  features = 10,          # number of features to plot (they are selected by weight)
+  
+  # extra arguments that are passed to the `pheatmap` function
+  cluster_rows = TRUE, cluster_cols = FALSE,
+  show_rownames = TRUE, show_colnames = FALSE,
+  annotation_samples = c("pathology_T_stage","overall_survival", "pathologic_stage")
+)
+```
+
+```{r}
+plot_data_heatmap(model,
+  view = "SCNV",         # view of interest
+  factor = 1,             # factor of interest
+  features = 10,          # number of features to plot (they are selected by weight)
+  
+  # extra arguments that are passed to the `pheatmap` function
+  cluster_rows = TRUE, cluster_cols = FALSE,
+  show_rownames = TRUE, show_colnames = FALSE,
+  annotation_samples = c("pathology_T_stage","overall_survival", "pathologic_stage"),
+  denoise = TRUE
+)
+```
+
+```{r}
+plot_data_heatmap(model,
+  view = "SCNV",         # view of interest
+  factor = 2,             # factor of interest
+  features = 10,          # number of features to plot (they are selected by weight)
+  
+  # extra arguments that are passed to the `pheatmap` function
+  cluster_rows = TRUE, cluster_cols = FALSE,
+  show_rownames = TRUE, show_colnames = FALSE,
+  annotation_samples = c("pathology_T_stage","overall_survival", "pathologic_stage")
+)
+```
+```{r}
+plot_data_heatmap(model,
+  view = "SCNV",         # view of interest
+  factor = 3,             # factor of interest
+  features = 10,          # number of features to plot (they are selected by weight)
+  
+  # extra arguments that are passed to the `pheatmap` function
+  cluster_rows = TRUE, cluster_cols = FALSE,
+  show_rownames = TRUE, show_colnames = FALSE,
+  annotation_samples = c("pathology_T_stage","overall_survival", "pathologic_stage")
+)
+```
+
+
+```{r}
+plot_data_heatmap(model,
+  view = "methylation",         # view of interest
+  factor = 1,             # factor of interest
+  features = 10,          # number of features to plot (they are selected by weight)
+  
+  # extra arguments that are passed to the `pheatmap` function
+  cluster_rows = TRUE, cluster_cols = FALSE,
+  show_rownames = TRUE, show_colnames = FALSE,
+  annotation_samples = c("pathologic_stage", "status", "overall_survival"),
+  denoise = TRUE
+)
+```
+
+
+```{r}
+plot_data_heatmap(model,
+  view = "methylation",         # view of interest
+  factor = 2,             # factor of interest
+  features = 10,          # number of features to plot (they are selected by weight)
+  
+  # extra arguments that are passed to the `pheatmap` function
+  cluster_rows = TRUE, cluster_cols = FALSE,
+  show_rownames = TRUE, show_colnames = FALSE,
+  annotation_samples = c("pathology_T_stage","overall_survival", "pathologic_stage")
+)
+```
+
+
+```{r}
+plot_data_heatmap(model,
+  view = "methylation",         # view of interest
+  factor = 3,             # factor of interest
+  features = 10,          # number of features to plot (they are selected by weight)
+  
+  # extra arguments that are passed to the `pheatmap` function
+  cluster_rows = TRUE, cluster_cols = FALSE,
+  show_rownames = TRUE, show_colnames = FALSE,
+  annotation_samples = c("pathologic_stage", "status", "overall_survival"),
+  denoise = TRUE
+)
+```
+
+```{r}
+plot_data_heatmap(model,
+  view = "protein",         # view of interest
+  factor = 1,             # factor of interest
+  features = 10,          # number of features to plot (they are selected by weight)
+  
+  # extra arguments that are passed to the `pheatmap` function
+  cluster_rows = TRUE, cluster_cols = FALSE,
+  show_rownames = TRUE, show_colnames = FALSE,
+  annotation_samples = c("pathology_T_stage","overall_survival", "pathologic_stage")
+)
+```
+
+```{r}
+plot_data_heatmap(model,
+  view = "protein",         # view of interest
+  factor = 2,             # factor of interest
+  features = 10,          # number of features to plot (they are selected by weight)
+  
+  # extra arguments that are passed to the `pheatmap` function
+  cluster_rows = TRUE, cluster_cols = FALSE,
+  show_rownames = TRUE, show_colnames = FALSE,
+  annotation_samples = c("pathology_T_stage","overall_survival", "pathologic_stage")
+)
+```
+
+```{r}
+plot_data_heatmap(model,
+  view = "protein",         # view of interest
+  factor = 3,             # factor of interest
+  features = 10,          # number of features to plot (they are selected by weight)
+  
+  # extra arguments that are passed to the `pheatmap` function
+  cluster_rows = TRUE, cluster_cols = FALSE,
+  show_rownames = TRUE, show_colnames = FALSE,
+  annotation_samples = c("pathology_T_stage","overall_survival", "pathologic_stage")
+)
+```
+
+
+```{r}
+plot_data_scatter(model,
+  view = "mRNA",         # view of interest
+  factor = 1,             # factor of interest
+  features = 5,           # number of features to plot (they are selected by weight)
+  add_lm = TRUE,          # add linear regression
+  color_by = "gender"
+)
+```
+
+```{r}
+plot_data_scatter(model,
+  view = "SCNV",         # view of interest
+  factor = 1,             # factor of interest
+  features = 5,           # number of features to plot (they are selected by weight)
+  add_lm = TRUE,          # add linear regression
+  color_by = "gender"
+)
+```
+
+```{r}
+p <- plot_factors(mofa_object, 
+  factors = c(1,3), 
+  color_by = "C9orf53_SCNV",
+  #shape_by = "C9orf53_SCNV",
+  dot_size = 2.5,
+  show_missing = T
+)
+
+p <- p + 
+  geom_hline(yintercept=-1, linetype="dashed") +
+  geom_vline(xintercept=(-0.5), linetype="dashed")
+
+print(p)
+```
+
+
+```{r}
+p2 <- plot_factors(mofa_object, 
+  factors = c(1,2), 
+  color_by = "CELSR1_methylation",
+  #shape_by = "C9orf53_SCNV",
+  dot_size = 2.5,
+  show_missing = T
+)
+
+p2 <- p2 + 
+  geom_hline(yintercept=-1, linetype="dashed") +
+  geom_vline(xintercept=(-0.5), linetype="dashed")
+
+print(p2)
+```
+
+
+
+## Non-linear dimensionality reduction
+
+```{r}
+set.seed(42)
+model <- run_umap(model)
+```
+
+```{r}
+plot_dimred(model,
+            method = "UMAP",
+            color_by = "gender")
+```
+```{r}
+set.seed(42)
+model <- run_tsne(model)
+```
+
+```{r}
+plot_dimred(model,
+            method = "TSNE",
+            color_by = "gender")
+```
+
+### Imputation of missing values
+
+```{r}
+model <- impute(model)
+```
+
+```{r}
+model@imputed_data
+```
+
+
+```{r}
+genes <- list("CELF4_mRNA","GRIA2_mRNA")
+
+genes %>% map(~ plot_factors(model, 
+  factors = c(1,3), 
+  color_by = ., 
+  scale = T,
+  legend = F
+)) %>% cowplot::plot_grid(plotlist=., nrow=1)
+```
+
+
+```{r}
+genes <- list("CD79A_mRNA","CXCL13_mRNA")
+
+genes %>% map(~ plot_factors(model, 
+  factors = c(2,3), 
+  color_by = ., 
+  scale = T,
+  legend = F
+)) %>% cowplot::plot_grid(plotlist=., nrow=1)
+```
+
+

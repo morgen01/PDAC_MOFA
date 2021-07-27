@@ -1,0 +1,253 @@
+---
+title: "gsea_model11"
+author: "Christina Morgenstern"
+date: "6/7/2021"
+output: html_document
+---
+# Geneset Enrichment Analysis of model 11 using the GO:BP gene set
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# set options for diagrams
+options(ggrepel.max.overlaps = 30)
+```
+
+
+```{r}
+library(data.table)
+library(purrr)
+library(ggplot2)
+library(cowplot)
+# for GSEA analysis
+library(msigdbr)
+
+# MOFA
+library(MOFAdata)
+library(MOFAdata)
+```
+
+```{r}
+RStudio.Version()
+```
+
+
+```{r}
+msigdbr_collections()
+```
+
+```{r}
+model <- read_rds('/Users/christina/01_Files/19_Master studies/02_Course work/13_Capstone/data/data/models_final/MOFA_PAAD_11.rds')
+```
+
+
+```{r}
+# prepare feature names for mRNA view i.e. remove _mRNA
+features_names(model)[["mRNA"]] <- features_names(model)[["mRNA"]] %>% stringr::str_replace_all("_mRNA","")
+head(features_names(model)[["mRNA"]])
+```
+
+
+```{r}
+matrix.please<-function(x) {
+  m<-as.matrix(x[,-1])
+  rownames(m)<-x[[1]]
+  m
+}
+```
+
+
+```{r}
+msigdb.matrix <- msigdbr(
+  species = "Homo sapiens",
+  category = "C5", 
+  subcategory = "BP"
+  ) %>% as.data.table %>% .[,id:=1] %>%
+  dcast(gs_name~gene_symbol, value.var="id", fill=0, fun.aggregate = mean) %>% 
+  matrix.please
+```
+
+```{r}
+features <- intersect(features_names(model)[["mRNA"]],colnames(msigdb.matrix))
+features
+```
+
+```{r}
+help(run_enrichment)
+```
+
+
+```{r}
+# GSEA on positive weights
+gsea.positive <- run_enrichment(model, 
+  feature.sets = msigdb.matrix, 
+  view = "mRNA", 
+  sign = "positive"
+)
+```
+
+```{r}
+# GSEA on negative weights
+gsea.negative <- run_enrichment(model, 
+  feature.sets = msigdb.matrix, 
+  view = "mRNA", 
+  sign = "negative"
+)
+```
+
+
+```{r}
+names(gsea.positive)
+```
+
+```{r}
+gsea.positive$set.statistics[1:5, 1]
+```
+
+```{r}
+gsea.positive$pval.adj[1:5,1]
+```
+```{r}
+plot_enrichment_heatmap(gsea.positive)
+```
+
+```{r}
+plot_enrichment_heatmap(gsea.negative)
+```
+
+
+
+```{r}
+plot_enrichment(gsea.positive, 
+  factor = 1, 
+  max.pathways = 15
+)
+```
+```{r}
+plot_enrichment(gsea.positive, 
+  factor = 2, 
+  max.pathways = 15
+)
+```
+
+```{r}
+plot_enrichment(gsea.positive, 
+  factor = 3, 
+  max.pathways = 15
+)
+```
+
+
+```{r}
+plot_enrichment(gsea.negative, 
+  factor = 1, 
+  max.pathways = 15
+)
+```
+
+```{r}
+plot_enrichment(gsea.negative, 
+  factor = 2, 
+  max.pathways = 15
+)
+```
+
+```{r}
+plot_enrichment(gsea.negative, 
+  factor = 3, 
+  max.pathways = 15
+)
+```
+
+```{r}
+plot_enrichment(gsea.negative, 
+  factor = 4, 
+  max.pathways = 15
+)
+```
+
+```{r}
+plot_enrichment(gsea.negative, 
+  factor = 5, 
+  max.pathways = 15
+)
+```
+
+
+# Gene details - positive
+```{r}
+plot_enrichment_detailed(gsea.positive, 
+  factor = 1, 
+  max.genes = 8, 
+  max.pathways = 5
+)
+
+```
+
+```{r}
+plot_enrichment_detailed(gsea.positive, 
+  factor = 2, 
+  max.genes = 8, 
+  max.pathways = 5
+)
+
+```
+
+```{r}
+plot_enrichment_detailed(gsea.positive, 
+  factor = 3, 
+  max.genes = 8, 
+  max.pathways = 5
+)
+
+```
+
+# Gene details - negative
+```{r}
+plot_enrichment_detailed(gsea.negative, 
+  factor = 1, 
+  max.genes = 8, 
+  max.pathways = 5
+)
+
+```
+
+```{r}
+plot_enrichment_detailed(gsea.negative, 
+  factor = 2, 
+  max.genes = 8, 
+  max.pathways = 5
+)
+
+```
+
+```{r}
+plot_enrichment_detailed(gsea.negative, 
+  factor = 3, 
+  max.genes = 8, 
+  max.pathways = 5
+)
+
+```
+
+```{r}
+plot_enrichment_detailed(gsea.negative, 
+  factor = 4, 
+  max.genes = 8, 
+  max.pathways = 5
+)
+
+```
+
+```{r}
+plot_enrichment_detailed(gsea.negative, 
+  factor = 5, 
+  max.genes = 8, 
+  max.pathways = 5
+)
+
+```
+
+
+
